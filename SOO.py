@@ -1,14 +1,18 @@
 
-from numpy import split
+from numpy import split, sign, ones_like, r_, zeros, ones, array, c_, eye, linspace
+from numpy.random import rand
 from integro import odeDP5
 from itertools import product
-from odepc import OdePC
+# from odepc import OdePC
 
 import bderv2 as bderv
 import pdb
 
+import matplotlib.pyplot as plot
+from matplotlib.pyplot import subplots, title, plot, show
+
 def drawmat(M, t='M', a = 0):
-        
+
         fig1,ax1 = subplots()
         ax1.matshow(M,cmap="winter",alpha=a);title(t)
         d=len(M)
@@ -93,7 +97,7 @@ for b in tuple(product(set((-1,1)),repeat=d)):
     Gb[b] = Fb[b[0:d]]
 
 DH = c_[eye(d), zeros((d,d))]
-Bc = bderv.Bderv(Gb,DH,2)
+Bc = bderv.BdervExtra(Gb,DH,2)
 v = array([-.1,-.1,0,0])
 B,dv = Bc.Bm(v)
 drawmat(B,'Sue',a=0.5)

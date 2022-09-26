@@ -1,18 +1,18 @@
 #!/usr/bin/env python
 # coding: utf-8
-import sympy as sm
-from integro import odeDP5
-from bderv2 import Bderv
-import numpy as np
-from numpy import array,asfarray,pi,sin,cos,sqrt,diag,hstack,vstack,linspace,zeros,ones_like,angle,exp,real,imag
 import matplotlib.pyplot as plt
-from scipy.optimize import minimize
+import numpy as np
 import sympy as sm
-from integro import odeDP5
-from bderv2 import Bderv
 import sympy as sym
-from jacob import jacobian_cdas as jac
+from matplotlib.pyplot import gca
+from numpy import (angle, argmax, array, asfarray, cos, diag, dot, exp, hstack,
+                   imag, linspace, ones, ones_like, pi, r_, real, sin, sqrt,
+                   vstack, zeros)
+from scipy.optimize import minimize
 
+from bderv2 import Bderv
+from integro import odeDP5
+from jacob import jacobian_cdas as jac
 
 
 ####Section 0
@@ -32,7 +32,7 @@ class chair(object):
       self.blt = 0.01
 
 
-   def _rho(self): 
+   def _rho(self):
        '''
        For a given aerial initial condition IC, solves for the point rho, where both legs touchdown at x,xdot =0, w,wdot = 0.
        Inputs: None
@@ -50,6 +50,7 @@ class chair(object):
      Inputs: None
      Outputs: None
      '''
+     aux = lambda t,y,trj,p=None: []
      self.air = odeDP5(self.air_vf)
      def air_td(t,y,p):
            y0 = y[0][0:3]
@@ -61,16 +62,21 @@ class chair(object):
      self.rl  = odeDP5(self.right_leg_vf)
      def rl_td(t,y,p):
            y0 = y[0][0:3]
-           y1 = y[1][0:3] 
+           y1 = y[1][0:3]
            return (self.H2(*y0) < 0) and (self.H2(*y1) > 0)
      self.rl.event = rl_td
      self.ll  = odeDP5(self.left_leg_vf)
      def ll_td(t,y,p):
            y0 = y[0][0:3]
-           y1 = y[1][0:3] 
+           y1 = y[1][0:3]
            return (self.H1(*y0) < 0) and (self.H1(*y1) > 0)
      self.ll.event = ll_td
      self.bl  = odeDP5(self.both_leg_vf)
+
+     self.air.aux = aux
+     self.rl.aux = aux
+     self.ll.aux = aux
+     self.bl.aux = aux
 
    def build_sample(self):
      '''
@@ -82,7 +88,7 @@ class chair(object):
           (1,-1): asfarray(self.right_leg_vf(0,self.rho, 0)),
           (-1,1): asfarray(self.left_leg_vf(0,self.rho, 0)),
           (1,1):  asfarray(self.both_leg_vf(0,self.rho, 0))}
- 
+
    def var(self,IC):
       '''
       Computes variational pre and post impact matrices Dphi(s,rho) and Dphi(t-s,x)
@@ -118,7 +124,7 @@ class chair(object):
    def go(self,IC,Tr=None):
        '''
        Integrates nonlinear vector field with odeDP5 with event detection
-       Inputs: 
+       Inputs:
            dl -- d-length array, initial condition
        Outputs:
            [t0,t1,y2],[y0,y1,y2] -- length 3-lists of pairs ti,yi with are the times ti, and state yi, for a trajectory in smooth mode i
@@ -151,7 +157,7 @@ class chair(object):
           if Tr is not None:
            if rt < Tr:
              t2,y2 = self.bl(yy,0,Tr-rt)
-             
+
        return [t,t1,t2],[y,y1,y2]
 
 
@@ -167,7 +173,7 @@ class chair(object):
    def left_leg_vf(self,t,yy,p):
        x,y,w,dx,dy,dw = yy
        return  self.f2(*yy).flatten()
- 
+
    def both_leg_vf(self,t,yy,p):
        x,y,w,dx,dy,dw = yy
        return self.fg(*yy).flatten()
@@ -180,7 +186,7 @@ class chair(object):
     Outputs: None
     '''
     m, I, x, y, w, dx, dy, dw, l, g, th, kappa, beta = sym.symbols(
-        r'm, I, x, y, \omega, \dot{x}, \dot{y}, \dot{\omega}, \ell, g, \theta, \alpha, \beta', 
+        r'm, I, x, y, \omega, \dot{x}, \dot{y}, \dot{\omega}, \ell, g, \theta, \alpha, \beta',
         )
 
     q = sym.Matrix([[x,y,w]]).T
@@ -190,7 +196,7 @@ class chair(object):
     a = -sym.Matrix([[ (x + l*sym.cos(th-w))**2 + (y - l*sym.sin(th-w)),(x - l*sym.cos(w+th))**2 + (y - l*sym.sin(w+th))]]).T
     Da = sym.Matrix.hstack(*[sym.diff(a,_) for _ in q])
     Dh = sym.Matrix.hstack(Da,sym.Matrix.zeros(2,3))
-    
+
 
     ## vectors in kernel of Da
     v0=sym.Matrix([1/Da[0,0],0,-1/Da[0,-1]])
@@ -206,7 +212,7 @@ class chair(object):
       ddq = f
       for j in [0,1]:
         if b[j] > 0:
-          ddq -= (kappa * a[j] + beta * (Da[j,:] * dq)[0]) * Da[j,:].T 
+          ddq -= (kappa * a[j] + beta * (Da[j,:] * dq)[0]) * Da[j,:].T
       F[b] = (sym.expand(sym.Matrix.vstack(dq,M.inv()*ddq)))
 
 
@@ -217,9 +223,9 @@ class chair(object):
 
     ##saltation products
     I6 = sym.Matrix.eye(6)
-    self.M12 = ( (I6 + (F[(+1,+1)] - F[(+1,-1)])*Dh[1,:]/Dh[1,:].dot(F[(+1,-1)])) 
+    self.M12 = ( (I6 + (F[(+1,+1)] - F[(+1,-1)])*Dh[1,:]/Dh[1,:].dot(F[(+1,-1)]))
       * (I6 + (F[(+1,-1)] - F[(-1,-1)])*Dh[0,:]/Dh[0,:].dot(F[(-1,-1)])) )
-    self.M21 = ( (I6 + (F[(+1,+1)] - F[(-1,+1)])*Dh[0,:]/Dh[0,:].dot(F[(-1,+1)])) 
+    self.M21 = ( (I6 + (F[(+1,+1)] - F[(-1,+1)])*Dh[0,:]/Dh[0,:].dot(F[(-1,+1)]))
           * (I6 + (F[(-1,+1)] - F[(-1,-1)])*Dh[1,:]/Dh[1,:].dot(F[(-1,-1)])) )
     #build callables for numerical evaluation
     pars = {kappa:self.k, beta:self.b, th:self.th,l:self.l,m:self.m,I:self.I,g:self.g}
@@ -268,20 +274,20 @@ for ii in range(len(dv)):
     v = zeros(6);v[2] = dv[ii];
     dvv[ii] = B(v)[-2]
     dvs[ii] = Bs(v)[-2]
-    
+
 ###Section 3
 ####jacobian comparison
 D = []
-def gf(IC): 
+def gf(IC):
    Ta,a = C.air(IC,0,1)
-   def _f(t,x): 
-         return C.H1(*x[:3]) 
+   def _f(t,x):
+         return C.H1(*x[:3])
    t,a = C.air.refine(_f)
    tt,b = C.bl(a,0,C.blt+.005) #dosh!
    Tf = Ta[-1] + tt[-1]
    #print(str(Tf))
    def _gf(x):
-    t,y =C.go(x, Tr=Tf) 
+    t,y =C.go(x, Tr=Tf)
     D.append(t[-1][-1]-Tf)
     return y[-1][-1]-b[-1]
    return _gf
@@ -289,10 +295,11 @@ def gf(IC):
 
 v = array([0,0,-.01,0,0,0])
 IC = C.rho + asfarray([0,.02,0,0,0,0])
-pp = gf(IC)     
+pp = gf(IC)
 
 print("Begining timing tests...")
 import time
+
 ta = time.time()
 df = jac(pp, 1e-4*ones(6))
 
@@ -303,6 +310,7 @@ tb = time.time()
 t0 = time.time()
 D1,D2=C.var(IC)
 from bderv2 import BdervExtra
+
 te = time.time()
 B = BdervExtra(C.Ft,C.DH,6)
 M1 = B.Bd(v)
@@ -319,9 +327,8 @@ print("B-derv took " + str(tee-te) + " seconds")
 ######################
 #plotting
 import matplotlib as mpl
-import matplotlib.pyplot as plt
 import matplotlib.patches as patches
-
+import matplotlib.pyplot as plt
 
 font = {'family':'sans-serif', 'size':10}
 mpl.rc('font', **font)
@@ -338,7 +345,7 @@ neg_slope_color = (1, .5, .5)
 open_circle_params = {'marker':'.', 'mfc':'w', 'mew':4}
 
 ax_line_params = {'lw':4, 'color':'k'}
-sim_color = 'purple'  
+sim_color = 'purple'
 
 #parameters for drawings / animations
 body_color = 'k'
@@ -387,7 +394,7 @@ def draw_body(ax,p,COM):
         bdy_style = default_bdy_style
       rect = patches.Rectangle((x-.25, y), .5, .1, **bdy_style)
       ax.add_patch(rect)
-      handles = {'body': rect} 
+      handles = {'body': rect}
       return ax,handles
 
 def draw_dd(ax,p):
@@ -418,7 +425,7 @@ def draw_leg(ax,p,act=False):
      #    ax.plot(xhp2+0, yc-ll/2, marker='s',color='blue')
 
 
-     
+
 
 def draw_ground(ax, p, z=.25, depth=1, xc=0, width=5,gnd='c'):
   '''
